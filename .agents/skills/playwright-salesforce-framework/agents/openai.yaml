@@ -1,0 +1,3 @@
+display_name: Playwright Salesforce Framework
+short_description: Maintain Salesforce Lightning Playwright tests with saved-auth, MFA-aware, and readiness-aware patterns.
+default_prompt: Help me extend or troubleshoot the Salesforce Playwright framework in this repository.
