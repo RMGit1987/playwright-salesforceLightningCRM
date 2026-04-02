@@ -1,0 +1,275 @@
+name: Playwright Salesforce
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_performance:
+        description: Run browser-backed performance tests after regression
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  prepare_auth_state:
+    name: Prepare Auth State
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      SALESFORCE_USERNAME: ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_PASSWORD: ${{ secrets.SALESFORCE_PASSWORD }}
+      SALESFORCE_BASE_URL: ${{ secrets.SALESFORCE_BASE_URL }}
+      SALESFORCE_LOGIN_URL: ${{ secrets.SALESFORCE_LOGIN_URL }}
+      SALESFORCE_AUTH_URL: ${{ secrets.SALESFORCE_AUTH_URL }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+      SALESFORCE_TOTP_SECRET: ${{ secrets.SALESFORCE_TOTP_SECRET }}
+      SALESFORCE_TOTP_URI: ${{ secrets.SALESFORCE_TOTP_URI }}
+      SALESFORCE_TOTP_PERIOD: ${{ secrets.SALESFORCE_TOTP_PERIOD }}
+      SALESFORCE_TOTP_ALGORITHM: ${{ secrets.SALESFORCE_TOTP_ALGORITHM }}
+      SALESFORCE_MFA_TIMEOUT_MS: ${{ secrets.SALESFORCE_MFA_TIMEOUT_MS }}
+      PW_HEADLESS: '1'
+      PW_WORKERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare shared Salesforce auth state
+        run: npm run test:ci:auth
+
+      - name: Upload Salesforce auth state
+        uses: actions/upload-artifact@v4
+        with:
+          name: salesforce-auth-state
+          path: |
+            playwright/.auth/salesforce-user.json
+            playwright/.seed/salesforce-user.json
+          retention-days: 1
+
+  smoke_authenticated:
+    name: Authenticated Smoke
+    needs: prepare_auth_state
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      PW_RUN_ID: smoke-${{ github.run_id }}-${{ github.run_attempt }}
+      SALESFORCE_USERNAME: ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_PASSWORD: ${{ secrets.SALESFORCE_PASSWORD }}
+      SALESFORCE_BASE_URL: ${{ secrets.SALESFORCE_BASE_URL }}
+      SALESFORCE_LOGIN_URL: ${{ secrets.SALESFORCE_LOGIN_URL }}
+      SALESFORCE_AUTH_URL: ${{ secrets.SALESFORCE_AUTH_URL }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+      SALESFORCE_TOTP_SECRET: ${{ secrets.SALESFORCE_TOTP_SECRET }}
+      SALESFORCE_TOTP_URI: ${{ secrets.SALESFORCE_TOTP_URI }}
+      SALESFORCE_TOTP_PERIOD: ${{ secrets.SALESFORCE_TOTP_PERIOD }}
+      SALESFORCE_TOTP_ALGORITHM: ${{ secrets.SALESFORCE_TOTP_ALGORITHM }}
+      SALESFORCE_MFA_TIMEOUT_MS: ${{ secrets.SALESFORCE_MFA_TIMEOUT_MS }}
+      PW_HEADLESS: '1'
+      PW_WORKERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Download Salesforce auth state
+        uses: actions/download-artifact@v4
+        with:
+          name: salesforce-auth-state
+          path: playwright
+
+      - name: Run authenticated smoke suite
+        id: smoke
+        continue-on-error: true
+        run: npm run test:ci:smoke
+
+      - name: Upload smoke artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-run
+          path: test-results/run-${{ env.PW_RUN_ID }}
+          retention-days: 14
+
+      - name: Fail workflow when smoke fails
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
+
+  api_tests:
+    name: API Tests
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      PW_RUN_ID: api-${{ github.run_id }}-${{ github.run_attempt }}
+      SALESFORCE_AUTH_URL: ${{ secrets.SALESFORCE_AUTH_URL }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+      SALESFORCE_BASE_URL: ${{ secrets.SALESFORCE_BASE_URL }}
+      SALESFORCE_CLIENT_ID: ${{ secrets.SALESFORCE_CLIENT_ID }}
+      SALESFORCE_CLIENT_SECRET: ${{ secrets.SALESFORCE_CLIENT_SECRET }}
+      PW_HEADLESS: '1'
+      PW_WORKERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run API suite
+        id: api
+        continue-on-error: true
+        run: npm run test:api:checked
+
+      - name: Upload API artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-run
+          path: test-results/run-${{ env.PW_RUN_ID }}
+          retention-days: 14
+
+      - name: Fail workflow when API suite fails
+        if: steps.api.outcome == 'failure'
+        run: exit 1
+
+  regression_authenticated:
+    name: Authenticated Regression
+    needs: [prepare_auth_state, smoke_authenticated]
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      PW_RUN_ID: regression-${{ github.run_id }}-${{ github.run_attempt }}
+      SALESFORCE_USERNAME: ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_PASSWORD: ${{ secrets.SALESFORCE_PASSWORD }}
+      SALESFORCE_BASE_URL: ${{ secrets.SALESFORCE_BASE_URL }}
+      SALESFORCE_LOGIN_URL: ${{ secrets.SALESFORCE_LOGIN_URL }}
+      SALESFORCE_AUTH_URL: ${{ secrets.SALESFORCE_AUTH_URL }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+      SALESFORCE_TOTP_SECRET: ${{ secrets.SALESFORCE_TOTP_SECRET }}
+      SALESFORCE_TOTP_URI: ${{ secrets.SALESFORCE_TOTP_URI }}
+      SALESFORCE_TOTP_PERIOD: ${{ secrets.SALESFORCE_TOTP_PERIOD }}
+      SALESFORCE_TOTP_ALGORITHM: ${{ secrets.SALESFORCE_TOTP_ALGORITHM }}
+      SALESFORCE_MFA_TIMEOUT_MS: ${{ secrets.SALESFORCE_MFA_TIMEOUT_MS }}
+      PW_HEADLESS: '1'
+      PW_WORKERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Download Salesforce auth state
+        uses: actions/download-artifact@v4
+        with:
+          name: salesforce-auth-state
+          path: playwright
+
+      - name: Run authenticated regression suite
+        id: regression
+        continue-on-error: true
+        run: npm run test:ci:regression
+
+      - name: Upload regression artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-run
+          path: test-results/run-${{ env.PW_RUN_ID }}
+          retention-days: 14
+
+      - name: Fail workflow when regression fails
+        if: steps.regression.outcome == 'failure'
+        run: exit 1
+
+  performance_authenticated:
+    name: Authenticated Performance
+    needs: [prepare_auth_state, regression_authenticated]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_performance }}
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      PW_RUN_ID: performance-${{ github.run_id }}-${{ github.run_attempt }}
+      SALESFORCE_USERNAME: ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_PASSWORD: ${{ secrets.SALESFORCE_PASSWORD }}
+      SALESFORCE_BASE_URL: ${{ secrets.SALESFORCE_BASE_URL }}
+      SALESFORCE_LOGIN_URL: ${{ secrets.SALESFORCE_LOGIN_URL }}
+      SALESFORCE_AUTH_URL: ${{ secrets.SALESFORCE_AUTH_URL }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+      SALESFORCE_TOTP_SECRET: ${{ secrets.SALESFORCE_TOTP_SECRET }}
+      SALESFORCE_TOTP_URI: ${{ secrets.SALESFORCE_TOTP_URI }}
+      SALESFORCE_TOTP_PERIOD: ${{ secrets.SALESFORCE_TOTP_PERIOD }}
+      SALESFORCE_TOTP_ALGORITHM: ${{ secrets.SALESFORCE_TOTP_ALGORITHM }}
+      SALESFORCE_MFA_TIMEOUT_MS: ${{ secrets.SALESFORCE_MFA_TIMEOUT_MS }}
+      PW_HEADLESS: '1'
+      PW_WORKERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Download Salesforce auth state
+        uses: actions/download-artifact@v4
+        with:
+          name: salesforce-auth-state
+          path: playwright
+
+      - name: Run performance suite
+        id: performance
+        continue-on-error: true
+        run: npm run test:ci:performance
+
+      - name: Upload performance artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-run
+          path: test-results/run-${{ env.PW_RUN_ID }}
+          retention-days: 14
+
+      - name: Fail workflow when performance fails
+        if: steps.performance.outcome == 'failure'
+        run: exit 1

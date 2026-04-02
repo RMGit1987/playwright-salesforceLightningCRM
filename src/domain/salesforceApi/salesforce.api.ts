@@ -5,16 +5,17 @@ loadEnv();
 
 interface SalesforceAuthResponse {
   access_token: string;
-  instance_url: string;
-  id: string;
+  instance_url?: string;
+  id?: string;
   token_type: string;
-  issued_at: string;
-  signature: string;
+  issued_at?: string;
+  signature?: string;
 }
 
 export class SalesforceApiClient {
   private accessToken: string | null = null;
   private instanceUrl: string;
+  private authError: string | null = null;
 
   constructor(
     private readonly request: APIRequestContext,
@@ -27,39 +28,94 @@ export class SalesforceApiClient {
       '';
   }
 
-  async authenticate() {
-    const username = process.env.SALESFORCE_USERNAME;
-    const password = process.env.SALESFORCE_PASSWORD;
-    const clientId = process.env.SALESFORCE_CLIENT_ID;
-    const clientSecret = process.env.SALESFORCE_CLIENT_SECRET;
-
-    const loginUrl = process.env.SALESFORCE_AUTH_URL || 'https://login.salesforce.com';
-
-    if (clientId && clientSecret && username && password) {
-      const response = await this.request.post(`${loginUrl}/services/oauth2/token`, {
-        form: {
-          grant_type: 'password',
-          client_id: clientId,
-          client_secret: clientSecret,
-          username,
-          password,
-        },
+  private buildAuthUrlCandidates(): string[] {
+    const candidates = [
+      process.env.SALESFORCE_AUTH_URL,
+      process.env.SALESFORCE_INSTANCE_URL,
+      process.env.SALESFORCE_BASE_URL,
+    ]
+      .filter((value): value is string => !!value)
+      .map((value) => {
+        try {
+          return new URL(value).origin;
+        } catch {
+          return value.replace(/\/+$/, '');
+        }
+      })
+      // Lightning hosts are valid for browser navigation, but not for the OAuth token endpoint.
+      .filter((value) => {
+        try {
+          return !new URL(value).hostname.endsWith('.lightning.force.com');
+        } catch {
+          return true;
+        }
       });
 
-      if (response.ok()) {
-        const body: SalesforceAuthResponse = await response.json();
-        this.accessToken = body.access_token;
-        this.instanceUrl = body.instance_url;
-        return;
+    if (candidates.length > 0) {
+      return [...new Set(candidates)];
+    }
+
+    const fallbackCandidates = [
+      process.env.SALESFORCE_AUTH_URL,
+      process.env.SALESFORCE_INSTANCE_URL,
+      process.env.SALESFORCE_BASE_URL,
+    ]
+      .filter((value): value is string => !!value)
+      .map((value) => {
+        try {
+          return new URL(value).origin;
+        } catch {
+          return value.replace(/\/+$/, '');
+        }
+      });
+
+    return [...new Set(fallbackCandidates)];
+  }
+
+  async authenticate() {
+    const clientId = process.env.SALESFORCE_CLIENT_ID;
+    const clientSecret = process.env.SALESFORCE_CLIENT_SECRET;
+    const authUrlCandidates = this.buildAuthUrlCandidates();
+
+    if (clientId && clientSecret) {
+      const errors: string[] = [];
+
+      for (const authUrl of authUrlCandidates) {
+        const response = await this.request.post(`${authUrl}/services/oauth2/token`, {
+          form: {
+            grant_type: 'client_credentials',
+            client_id: clientId,
+            client_secret: clientSecret,
+          },
+        });
+
+        if (response.ok()) {
+          const body: SalesforceAuthResponse = await response.json();
+          this.accessToken = body.access_token;
+          this.instanceUrl = body.instance_url || this.instanceUrl;
+          this.authError = null;
+          return;
+        }
+
+        const errorBody = await response.text().catch(() => '');
+        errors.push(
+          `${authUrl} -> status ${response.status()}: ${errorBody || 'authentication failure'}`,
+        );
       }
+
+      this.authError = `Salesforce OAuth client credentials flow failed. Attempts: ${errors.join(' | ')}`;
     }
 
     this.accessToken = process.env.SALESFORCE_ACCESS_TOKEN || null;
     if (!this.accessToken) {
-      console.warn('[SalesforceApiClient] No OAuth credentials configured. API tests requiring auth will be skipped.');
-      console.warn(
-        '[SalesforceApiClient] Set SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET, or provide SALESFORCE_ACCESS_TOKEN in .env.',
-      );
+      if (this.authError) {
+        console.warn(`[SalesforceApiClient] ${this.authError}`);
+      } else {
+        console.warn('[SalesforceApiClient] No API auth credentials configured. API tests requiring auth will be skipped.');
+        console.warn(
+          '[SalesforceApiClient] Set SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET for client credentials flow, or provide SALESFORCE_ACCESS_TOKEN in .env.',
+        );
+      }
     }
   }
 
@@ -68,8 +124,11 @@ export class SalesforceApiClient {
       await this.authenticate();
     }
     if (!this.accessToken) {
+      if (this.authError) {
+        throw new Error(this.authError);
+      }
       throw new Error(
-        'Salesforce API auth is not configured. Set SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET, or SALESFORCE_ACCESS_TOKEN.',
+        'Salesforce API auth is not configured. Set SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET for client credentials flow, or SALESFORCE_ACCESS_TOKEN.',
       );
     }
     if (!this.instanceUrl) {

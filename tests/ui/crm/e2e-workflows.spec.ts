@@ -16,7 +16,7 @@ test.describe('Feature: End-to-End CRM Workflows', () => {
     await loginPage.loginIfNeeded(salesforceUser.username, salesforceUser.password);
   });
 
-  test('@e2e @critical full lead lifecycle', async ({ page }) => {
+  test('@e2e @regression @critical full lead lifecycle', async ({ page }) => {
     const leadPage = new LeadPage(page);
     const leadData = buildLeadPayload();
 
@@ -36,7 +36,7 @@ test.describe('Feature: End-to-End CRM Workflows', () => {
     await expect(page).toHaveURL(/\/lightning\/r\/Lead\/[a-zA-Z0-9]{15,18}/, { timeout: 15_000 });
   });
 
-  test('@e2e create account then linked contact', async ({ page }) => {
+  test('@e2e @regression create account then linked contact', async ({ page }) => {
     const accountPage = new AccountPage(page);
     const contactPage = new ContactPage(page);
     const accountData = buildAccountPayload();
@@ -53,7 +53,7 @@ test.describe('Feature: End-to-End CRM Workflows', () => {
     await contactPage.saveAndExpectSuccess();
   });
 
-  test('@e2e create opportunity with related account', async ({ page }) => {
+  test('@e2e @regression create opportunity with related account', async ({ page }) => {
     const accountPage = new AccountPage(page);
     const oppPage = new OpportunityPage(page);
     const accountData = buildAccountPayload();
@@ -70,7 +70,7 @@ test.describe('Feature: End-to-End CRM Workflows', () => {
     await oppPage.saveAndExpectSuccess();
   });
 
-  test('@e2e create case for existing contact', async ({ page }) => {
+  test('@e2e @regression create case for existing contact', async ({ page }) => {
     const contactPage = new ContactPage(page);
     const casePage = new CasePage(page);
     const contactData = buildContactPayload();
@@ -87,7 +87,7 @@ test.describe('Feature: End-to-End CRM Workflows', () => {
     await casePage.saveAndExpectSuccess();
   });
 
-  test('@e2e create records across all objects', async ({ page }) => {
+  test('@e2e @regression create records across all objects', async ({ page }) => {
     const leadPage = new LeadPage(page);
     const accountPage = new AccountPage(page);
     const contactPage = new ContactPage(page);

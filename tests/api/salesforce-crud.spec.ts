@@ -8,7 +8,7 @@ const hasApiAuth =
 test.describe('Feature: Salesforce REST API', () => {
   test.describe('SOQL Queries (no auth required - validation only)', () => {
     test('@api query response schema is valid', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
 
       const response = await salesforceApi.query('SELECT Id, Name FROM Account LIMIT 5');
@@ -21,7 +21,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api query accounts returns expected fields', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const response = await salesforceApi.query('SELECT Id, Name, Industry, Type FROM Account LIMIT 10');
       expect(response.status()).toBe(200);
@@ -35,7 +35,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api query contacts returns expected fields', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const response = await salesforceApi.query('SELECT Id, FirstName, LastName, Email FROM Contact LIMIT 10');
       expect(response.status()).toBe(200);
@@ -46,7 +46,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api query leads returns expected fields', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const response = await salesforceApi.query('SELECT Id, FirstName, LastName, Company, Status FROM Lead LIMIT 10');
       expect(response.status()).toBe(200);
@@ -57,7 +57,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api query cases returns expected fields', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const response = await salesforceApi.query('SELECT Id, Subject, Status, Priority FROM Case LIMIT 10');
       expect(response.status()).toBe(200);
@@ -69,7 +69,7 @@ test.describe('Feature: Salesforce REST API', () => {
 
   test.describe('Describe SObject', () => {
     test('@api describe Account returns field metadata', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const response = await salesforceApi.describe('Account');
       expect(response.status()).toBe(200);
@@ -85,7 +85,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api describe Lead returns field metadata', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const response = await salesforceApi.describe('Lead');
       expect(response.status()).toBe(200);
@@ -96,7 +96,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api describe Contact returns field metadata', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const response = await salesforceApi.describe('Contact');
       expect(response.status()).toBe(200);
@@ -109,7 +109,7 @@ test.describe('Feature: Salesforce REST API', () => {
 
   test.describe('CRUD Operations', () => {
     test('@api @critical create and delete a lead via API', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const createResponse = await salesforceApi.createRecord('Lead', {
         LastName: `API Test Lead ${Date.now()}`,
@@ -127,7 +127,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api create and delete an account via API', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const createResponse = await salesforceApi.createRecord('Account', {
         Name: `API Test Account ${Date.now()}`,
@@ -143,7 +143,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api create and delete a contact via API', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const createResponse = await salesforceApi.createRecord('Contact', {
         FirstName: 'API',
@@ -159,7 +159,7 @@ test.describe('Feature: Salesforce REST API', () => {
     });
 
     test('@api response time is acceptable', async ({ salesforceApi }) => {
-      test.skip(!hasApiAuth, 'API auth not configured. Set OAuth credentials or SALESFORCE_ACCESS_TOKEN.');
+      test.skip(!hasApiAuth, 'API auth not configured. Set client credentials flow env vars or SALESFORCE_ACCESS_TOKEN.');
       await salesforceApi.authenticate();
       const start = Date.now();
       const response = await salesforceApi.query('SELECT Id FROM Account LIMIT 1');

@@ -24,6 +24,7 @@ Use this skill when working in this Salesforce Playwright repo, where Lightning 
 - `pageobjects/salesforce/`
 - `pageobjects/components/`
 - `tests/fixtures/base.fixture.ts`
+- `tests/README.md`
 - `playwright.config.ts`
 - `reporters/failure-intelligence-reporter.ts`
 - `README.md`
@@ -41,6 +42,14 @@ Use this skill when working in this Salesforce Playwright repo, where Lightning 
 - Support manual MFA approval and TOTP-based entry from `.env`.
 - Keep real secrets only in `.env`, never `.env.example`.
 - If MFA reappears, treat it as a framework/runtime issue first, not a random test failure.
+
+### 2A. Keep API Auth Separate From UI Auth
+
+- API tests in this repo use Salesforce Client Credentials Flow, not the browser session and not the saved UI storage state.
+- Point `SALESFORCE_AUTH_URL` and `SALESFORCE_INSTANCE_URL` at the org `*.my.salesforce.com` host for API work.
+- Do not use `login.salesforce.com` or `*.lightning.force.com` as the OAuth token host in this repo's local API setup.
+- The External Client App must have `Client Credentials Flow` enabled and an explicit `Run As` user with `API Enabled`.
+- The `Run As` user may be the same Salesforce user used for UI automation, but that must be configured on the app, not assumed from the profile alone.
 
 ### 3. Use Lightning Readiness, Not Just DOM Readiness
 
@@ -71,3 +80,10 @@ Use this skill when working in this Salesforce Playwright repo, where Lightning 
 - Run one spec at a time in headed mode when stabilizing flows.
 - Use the repo npm wrappers or equivalent raw commands with `AUTO_HEAL=1`, `PW_HEADLESS=0`, `PW_CHANNEL=chrome`, and `--workers=1`.
 - Use `--no-deps` when you want to reuse existing auth state and skip setup reruns.
+
+## Test Layer Guidance
+
+- `tests/api`: keep coverage endpoint-focused, contract-aware, and independent from browser state; use `salesforceApi` from `tests/fixtures/base.fixture.ts`.
+- `tests/ui`: rely on saved storage state via `authenticated-chromium` for almost all business flows; refresh auth state through `tests/auth.setup.ts` only when needed.
+- `tests/hybrid`: prove cross-surface business journeys after the UI and API layers already cover the lower-level behaviors.
+- `tests/performance`: treat these as browser-backed checks that still require authenticated storage state and Lightning readiness helpers.

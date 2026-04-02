@@ -124,7 +124,15 @@ Edit `.env` with your Salesforce Developer Edition credentials:
 SALESFORCE_USERNAME=your-username@example.com
 SALESFORCE_PASSWORD=your-password
 SALESFORCE_LOGIN_URL=https://your-org.lightning.force.com
+SALESFORCE_AUTH_URL=https://your-org.my.salesforce.com
+SALESFORCE_INSTANCE_URL=https://your-org.my.salesforce.com
 ```
+
+URL guidance:
+- use `SALESFORCE_LOGIN_URL` and `SALESFORCE_BASE_URL` for Salesforce browser navigation
+- use `SALESFORCE_AUTH_URL` and `SALESFORCE_INSTANCE_URL` for API auth and REST calls
+- for client credentials flow, prefer the My Domain host like `https://your-org.my.salesforce.com`
+- do not point `SALESFORCE_AUTH_URL` at `https://login.salesforce.com` or a `*.lightning.force.com` host for this repo's API setup
 
 ### Salesforce MFA / 2FA Setup
 
@@ -260,6 +268,45 @@ npm run test:spec:headed -- tests/ui/crm/case.spec.ts --grep "@smoke"
 
 # Keep debug env flags instead of clearing them
 PW_KEEP_DEBUG=1 npm run test:spec:headed -- tests/ui/crm/case.spec.ts
+```
+
+#### Performance Local Run
+
+For Salesforce, the safer local performance command is the saved-auth version below, so Playwright does not rerun `setup` and stop on MFA:
+
+```bash
+npm run test:performance:headed
+```
+
+#### API Local Run
+
+The API suite needs either:
+- `SALESFORCE_ACCESS_TOKEN`
+- both `SALESFORCE_CLIENT_ID` and `SALESFORCE_CLIENT_SECRET`
+
+For the current repo design, `SALESFORCE_CLIENT_ID` and `SALESFORCE_CLIENT_SECRET` should come from a Salesforce External Client App configured for Client Credentials Flow.
+
+Salesforce-side setup:
+- enable `Client Credentials Flow` on the External Client App
+- assign a `Run As` integration user for that app
+- confirm the `Run As` user is active, unlocked, and has `API Enabled`
+- the `Run As` user may be the same Salesforce user you use for UI automation, as long as the app is explicitly configured to run as that username
+- keep `SALESFORCE_AUTH_URL` pointed at your Salesforce org domain, for example `https://your-org.my.salesforce.com`
+- keep `SALESFORCE_INSTANCE_URL` pointed at the same org-domain family, not the Lightning UI host
+
+What we resolved in this repo:
+- `https://login.salesforce.com` returned `invalid_grant` because this client credentials setup must target the org My Domain host
+- `https://*.lightning.force.com` is a UI host and does not support the OAuth client credentials token request
+- after setting the External Client App `Run As` user and using the `*.my.salesforce.com` host, the API suite authenticated and passed
+
+Use these commands:
+
+```bash
+# Check whether API auth is configured
+npm run test:api:authcheck
+
+# Run the API suite only when auth is configured
+npm run test:api:checked
 ```
 
 #### Reports And Traces
@@ -523,27 +570,79 @@ Uses `@faker-js/faker` for realistic test data:
 - `@smoke` - Critical path tests
 - `@regression` - Full regression suite
 - `@critical` - Must-pass tests
+- `@e2e` - Long-form CRM lifecycle coverage
 - `@hybrid` - API + UI combined
 - `@perf` - Performance tests
 - `@api` - API-only tests
 
 ## API Tests
 
-For API tests, configure OAuth credentials in `.env`:
+For API tests, configure Salesforce Client Credentials Flow in `.env`:
 
 ```
-SALESFORCE_CLIENT_ID=your-connected-app-client-id
-SALESFORCE_CLIENT_SECRET=your-connected-app-client-secret
+SALESFORCE_CLIENT_ID=your-external-client-app-client-id
+SALESFORCE_CLIENT_SECRET=your-external-client-app-client-secret
+SALESFORCE_AUTH_URL=https://your-org.my.salesforce.com
+SALESFORCE_INSTANCE_URL=https://your-org.my.salesforce.com
 ```
 
 API tests will be skipped if OAuth credentials are not configured.
 
+If the API login fails under Client Credentials Flow, check these Salesforce-side items first:
+- the External Client App has `Client Credentials Flow` enabled
+- the app has a valid `Run As` user configured
+- the integration user has `API Enabled`
+- the `Run As` user is active and unlocked
+- `SALESFORCE_AUTH_URL` points to the correct Salesforce org-domain host instead of `login.salesforce.com`
+- `SALESFORCE_INSTANCE_URL` also uses the org-domain host instead of a `*.lightning.force.com` URL
+
+Current verified working pattern:
+
+```
+SALESFORCE_BASE_URL=https://your-org.lightning.force.com
+SALESFORCE_LOGIN_URL=https://your-org.lightning.force.com
+SALESFORCE_AUTH_URL=https://your-org.my.salesforce.com
+SALESFORCE_INSTANCE_URL=https://your-org.my.salesforce.com
+```
+
+In this repo, `npm run test:api:checked` is the current full non-UI suite. The `hybrid` and `performance` layers still depend on browser-authenticated Salesforce flows.
+
+For layer-by-layer test design guidance and sample test patterns, see [tests/README.md](/c:/Users/rohit/OneDrive%20-%20CAR%20Group%20Limited/IO/GitHub/playwright-salesforce/tests/README.md).
+
+For framework-level code explanations covering why core functions, variables, and return types are designed the way they are, see [framework-code-explanation.md](/c:/Users/rohit/OneDrive%20-%20CAR%20Group%20Limited/IO/GitHub/playwright-salesforce/docs/framework-code-explanation.md).
+
 ## CI/CD
 
-Run in CI mode:
+The repo now supports a layered GitHub Actions flow:
+- bootstrap one Salesforce authenticated storage state in CI
+- run browser-backed `@smoke` tests with `authenticated-chromium --no-deps`
+- run browser-backed `@regression` tests later in the workflow using the same saved storage state
+- run API tests independently with client credentials flow
+- optionally run performance tests after regression using the same saved storage state
+
+GitHub Actions secrets expected by the workflow:
+- `SALESFORCE_USERNAME`
+- `SALESFORCE_PASSWORD`
+- `SALESFORCE_BASE_URL`
+- `SALESFORCE_LOGIN_URL`
+- `SALESFORCE_AUTH_URL`
+- `SALESFORCE_INSTANCE_URL`
+- `SALESFORCE_CLIENT_ID`
+- `SALESFORCE_CLIENT_SECRET`
+- `SALESFORCE_TOTP_SECRET` or `SALESFORCE_TOTP_URI` when CI must satisfy MFA non-interactively
+- `SALESFORCE_TOTP_PERIOD` and `SALESFORCE_TOTP_ALGORITHM` only if your authenticator setup differs from the defaults
+- `SALESFORCE_MFA_TIMEOUT_MS` only if CI needs a non-default wait window
+
+Useful CI-oriented commands:
 ```bash
-CI=true npm test
+npm run test:ci:auth
+npm run test:ci:smoke
+npm run test:ci:regression
+npm run test:api:checked
+npm run test:ci:performance
 ```
+
+In CI, the browser-backed jobs should avoid rerunning the `setup` dependency after auth bootstrap and should instead reuse the saved file at `playwright/.auth/salesforce-user.json`.
 
 ## License
 
